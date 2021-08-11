@@ -1,2 +1,7 @@
-data
-model
+data/*
+model/*
+!.gitkeep
+.ipynb_checkpoints/
+__pychache__/
+*.ipynb
+*.pyc
