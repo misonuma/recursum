@@ -17,10 +17,8 @@ def get_embeddings(model):
         pad_embedding = tf.zeros([1, model.config.dim_emb], dtype=tf.float32)
         unk_embedding = tf.get_variable('unk', [1, model.config.dim_emb], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
         other_embeddings = tf.get_variable('emb', [model.config.n_vocab-2, model.config.dim_emb], dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-        oov_embeddings = tf.tile(unk_embedding, [model.n_oov, 1])
-        embeddings = tf.concat([pad_embedding, unk_embedding, other_embeddings, oov_embeddings], 0) # n_vocab x dim_emb
+        embeddings = tf.concat([pad_embedding, unk_embedding, other_embeddings], 0) # n_vocab x dim_emb
     return embeddings
-
 
 def encode_inputs(model, enc_inputs, sent_l, cell_name='', reuse=False):
 #     enc_inputs_flat = tf.reshape(enc_inputs, [model.batch_l*model.max_doc_l, model.max_sent_l, model.config.dim_emb])

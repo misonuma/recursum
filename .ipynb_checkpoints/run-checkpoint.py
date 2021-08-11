@@ -10,12 +10,15 @@ import numpy as np
 import tensorflow as tf
 import pandas as pd
 
+from tree import get_descendant_idxs
 from evaluation.rouge_scorer import RougeScorer
-from summarize import greedysum
+from summarize import treesum, greedysum
 from IPython.display import clear_output
 pd.set_option('display.max_columns', 50)
+# -
 
 rouge_scorer = RougeScorer(rouge_types=['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+
 
 def get_sents_from_tokens(tokens):
     return [' '.join(line_tokens) for line_tokens in tokens]
@@ -102,10 +105,10 @@ def init(config, trash=True):
     epoch = 0
     log_df = pd.DataFrame(columns=pd.MultiIndex.from_tuples(
         list(zip(*[['','','',
-                    'TRAIN','','','','','','','',
+                    'TRAIN','','','','','','','','',
                     'VALID','','','','','','','','','','','','','','','','',''],
                     ['TIME','BETA','AGG',
-                     'PPL','LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO',\
+                     'PPL','LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO','COVER',\
                      'PPL','LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO','TOPIC','R1','R2','RL','LCOV','ERR']]))))
     
     cmd_rm = 'trash -r %s' % config.dir_model if trash else 'rm -r %s' % config.dir_model
@@ -126,11 +129,15 @@ def init(config, trash=True):
     
     return epoch, log_df, logger
 
+# +
 def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, logger, sample=False, debug=False, jupyter=True):
     time_start = time.time()
 
     # train
-    ppl_losses_train, global_step, n_errors = compute_loss(sess, model, train_batches, mode='train', sample=True, debug=debug)
+    if not model.config.aggressive:
+        ppl_losses_train, global_step, n_errors = compute_loss(sess, model, train_batches, mode='train', sample=True, debug=debug)
+    else:
+        ppl_losses_train, global_step, n_errors = compute_loss_aggressive(sess, model, train_batches, mode='train', sample=True, debug=debug)
 
     log_train = ['%.2f' % np.minimum(loss, 1e+4) for loss in ppl_losses_train]
     log_errors = str(n_errors)
@@ -150,16 +157,25 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
     ppl_losses_dev, _, _ = compute_loss(sess, model, dev_batches, mode='eval', sample=sample)
     log_dev = ['%.2f' % np.minimum(loss, 1e+4) for loss in ppl_losses_dev]
     
+#     ppl_losses_mi = compute_loss_mi(sess, model, dev_batches, mode='eval')
+#     ppl_losses_mi = [0., 0., 0., 0.]
+#     log_dev_mi = ['%.2f' % np.minimum(loss, 1e+4) for loss in ppl_losses_mi]
+    
     depth_mean_logdetcovs_topic_posterior = compute_logdetcovs(sess, model, dev_batches, mode='eval', sample=sample)
     log_logdetcovs = ' | '.join(['%.1f' % logdetcov for logdetcov in depth_mean_logdetcovs_topic_posterior])
     ppl_dev = ppl_losses_dev[0]
     
+#     topic_sents_list, probs_topic_list, _ = compute_topic_sents_probs(sess, model, dev_batches, mode='eval', sample=sample)
+#     rouges_f1_dict = compute_rouges_f1(dev_batches, topic_sents_list, probs_topic_list, sys_sum=tmpsum, n_sents=5)
+#     log_rouges = ['%.3f'%rouge for rouge in rouges_f1_dict.values()]
+
     summary_l_rouge_df = compute_rouges_f1(sess, model, dev_batches, sys_sum=greedysum, topk=4, threshold=0.6, truncate=4, max_summary_l=6, num_split=8)
     rouges = summary_l_rouge_df[max(summary_l_rouge_df.keys())].mean().to_dict().values()
     log_rouges = ['%.3f'%rouge for rouge in rouges]
     
     beta = sess.run(model.beta)
     log_beta = '%.3f'%beta
+    log_agg = str(model.config.aggressive)
     
     # save model
     if global_step > model.config.save_steps:
@@ -175,7 +191,7 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
     log_time = int(time.time() - time_start)
     time_start = time.time()
     try:
-        log_df.loc[global_step] = pd.Series([log_time, log_beta] + log_train + log_dev + log_rouges + [log_logdetcovs] + [log_errors], index=log_df.columns)
+        log_df.loc[global_step] = pd.Series([log_time, log_beta, log_agg] + log_train + log_dev + log_rouges + [log_logdetcovs] + [log_errors], index=log_df.columns)
     except Exception as e:
         print(e)
         pdb.set_trace()
@@ -189,6 +205,9 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
     print_sample(test_instance, sess, model, logger=logger)
         
     return sess, model, saver, log_df, nan_flg
+
+
+# -
 
 def compute_loss(sess, model, batches, mode, sample, debug=False):
     def check(variable, sample_batch=None):
@@ -211,7 +230,7 @@ def compute_loss(sess, model, batches, mode, sample, debug=False):
         try:
             if mode == 'train':
                 _, _, _, global_step, loss_list, loss_sum = \
-                    sess.run([model.opt, model.opt_disc, tf.train.get_global_step(), model.loss_list_train, model.loss_sum], feed_dict = feed_dict, options=run_options)
+                    sess.run([model.opt, model.opt_enc, model.opt_disc, tf.train.get_global_step(), model.loss_list_train, model.loss_sum], feed_dict = feed_dict, options=run_options)
             elif mode == 'eval':
                 global_step = None
                 loss_list, loss_sum = sess.run([model.loss_list_eval, model.loss_sum], feed_dict = feed_dict, options=run_options)
@@ -223,6 +242,8 @@ def compute_loss(sess, model, batches, mode, sample, debug=False):
         except Exception as e:
             print(e)
             n_errors += 1
+            bl, pr, co = check([tf.reduce_any(tf.is_nan(model.probs_topic_posterior)), \
+                                    model.probs_topic_posterior, model.covs_topic_posterior], batch)                
         
         losses += [loss_list]
         loss_ppl += loss_sum # for computing PPL
@@ -233,6 +254,100 @@ def compute_loss(sess, model, batches, mode, sample, debug=False):
     ppl_losses = [ppl] + losses_mean
     
     return ppl_losses, global_step, n_errors
+
+def compute_loss_aggressive(sess, model, batches, mode, sample):
+    losses = []
+    loss_ppl = 0
+    n_tokens = 0
+    n_errors = 0
+    i_aggressive = 0
+    
+    for batch in batches:
+        feed_dict = model.get_feed_dict(batch, mode=mode)
+        feed_dict[model.t_variables['sample']] = sample
+        run_options = tf.RunOptions(report_tensor_allocations_upon_oom=debug)
+        
+        try:
+            if i_aggressive < model.config.n_aggressive:
+                # only emb & disc
+                _, _, global_step, loss_list, loss_sum = \
+                    sess.run([model.opt_infer, model.opt_disc_infer, tf.train.get_global_step(), model.loss_list_train, model.loss_sum], feed_dict=feed_dict, options=run_options)
+                i_aggressive += 1
+            else:
+                # only dec
+                _, _, global_step, loss_list, loss_sum = \
+                sess.run([model.opt_gen, model.opt_disc_gen, tf.train.get_global_step(), model.loss_list_train, model.loss_sum], feed_dict=feed_dict, options=run_options)
+                i_aggressive = 0
+
+        except Exception as e:
+            print(e)
+            n_errors += 1
+            continue
+        
+        losses += [loss_list]
+        loss_ppl += loss_sum # for computing PPL
+        n_tokens += np.sum(feed_dict[model.t_variables['dec_sent_l']]) # for computing PPL
+
+    losses_mean = list(np.mean(losses, 0))
+    ppl = np.exp((loss_ppl)/n_tokens)
+    ppl_losses = [ppl] + losses_mean
+    
+    return ppl_losses, global_step, n_errors
+
+
+def compute_loss_mi(sess, model, batches, mode):
+    def sample_gauss(means, logvars, partition_doc, n_sample=1):
+        noises = np.random.standard_normal(size=(n_sample, means.shape[0], means.shape[1], means.shape[-1]))
+        latents = means[None, :, :, :] + np.exp(0.5 * logvars)[None, :, :, :] * noises
+        latents = latents[np.where(np.tile(partition_doc[None, :, :], (latents.shape[0], 1, 1)) > 0)]
+        return latents
+
+    pdf_diag = lambda latents, means, logvars: np.exp(-1/2*np.sum((latents[None, None, :, :]-means[:, :, None, :])**2/np.exp(logvars[:, :, None, :]), -1)) \
+                                    / np.sqrt((2*np.pi)**means.shape[-1]*np.exp(np.sum(logvars, -1)))[:, :, None]
+    pdf_full = lambda latents, means, covs: \
+                                np.exp(-1/2*np.sum(np.matmul((latents[None, None, :, :]-means[:, :, None, :]), np.linalg.inv(covs))*(latents[None, None, :, :]-means[:, :, None, :]), -1))\
+                                / np.sqrt((2*np.pi)**means.shape[-1]*np.linalg.det(covs))[:, :, None]
+
+    means_sent_posterior, logvars_sent_posterior, probs_sent_topic_posterior, means_topic_posterior, covs_topic_posterior, loss_kl_sent_gmm, loss_kl_prob, partition_doc = \
+        compute_tensors(sess, model, batches, \
+            [model.means_sent_posterior, model.logvars_sent_posterior, model.probs_sent_topic_posterior, model.means_topic_posterior, model.covs_topic_posterior, model.loss_kl_sent_gmm, model.loss_kl_prob, tf.cast(model.mask_doc, dtype=tf.int32)], mode='eval')
+    latents_sent_posterior = sample_gauss(means_sent_posterior, logvars_sent_posterior, partition_doc, model.config.n_sample)
+    
+    if model.config.latent:
+        loss_kl_marg_prob = loss_mi_prob = 0.
+    else:
+        probs_sent_topic_prior = compute_tensors(sess, model, batches, [model.probs_sent_topic_prior], mode='eval')[0]
+        # kl loss about the topic distribution
+        probs_topic_posterior = np.mean(probs_sent_topic_posterior[np.where(partition_doc>0)], 0)
+        logits_topic_posterior = np.log(probs_topic_posterior)
+        logits_topic_prior = np.log(np.mean(probs_sent_topic_prior[np.where(partition_doc>0)], 0))
+
+        loss_kl_marg_prob = probs_topic_posterior.dot(logits_topic_posterior - logits_topic_prior)
+        loss_mi_prob = loss_kl_prob - loss_kl_marg_prob
+    
+    # kl loss about the latent code of topic sentences
+    probs_sent_posterior = pdf_diag(latents_sent_posterior, means_sent_posterior, logvars_sent_posterior)
+    logits_sent_posterior = np.log(np.mean(probs_sent_posterior[np.where(partition_doc>0)], 0))
+
+    probs_sent_topic = pdf_full(latents_sent_posterior, means_topic_posterior, covs_topic_posterior)
+    probs_sent_prior = np.matmul(probs_sent_topic_posterior, probs_sent_topic)
+    logits_sent_prior = np.log(np.mean(probs_sent_prior[np.where(partition_doc>0)], 0))
+
+    loss_kl_marg_sent_gmm = np.mean(logits_sent_posterior - logits_sent_prior)
+    loss_mi_sent_gmm = loss_kl_sent_gmm - loss_kl_marg_sent_gmm
+    
+    loss_mi = loss_mi_prob + loss_mi_sent_gmm
+    if loss_mi > model.config.max_loss_mi:
+        model.config.max_loss_mi = loss_mi
+        model.config.i_loss_mi = 0
+    else:
+        model.config.i_loss_mi += 1
+        
+    if model.config.i_loss_mi >= model.config.n_loss_mi:
+        model.config.aggressive = False
+    
+    return loss_mi_prob, loss_kl_marg_prob, loss_mi_sent_gmm, loss_kl_marg_sent_gmm
+
 
 def compute_logdetcovs(sess, model, batches, mode, sample):
     depth_logdetcovs_topic_posterior_dict = defaultdict(list)
@@ -335,6 +450,17 @@ def compute_rouge(data_df, reference_list, summary_list):
                               for index, reference, summary in zip(data_df.index, reference_list, summary_list)}
     rouge_df = pd.DataFrame.from_dict(rouge_dict, orient='index')
     return rouge_df
+
+
+# +
+# def compute_rouges_f1(batches, topic_sents_list, probs_topic_list, sys_sum, n_sents):
+#     sys_summary_sents_list = [sys_sum(topic_sents, probs_topic, n_sents=n_sents) for topic_sents, probs_topic in zip(topic_sents_list, probs_topic_list)]
+#     sys_summaries = ['. '.join(sys_summary_sents) for sys_summary_sents in sys_summary_sents_list]
+#     ref_summaries = [instance.summary for batch in batches for instance in batch]
+#     eval_metrics = EvalMetrics()
+#     rouges_f1_dict = eval_metrics.calc_rouges_f1_dict(sys_summaries, ref_summaries)
+#     return rouges_f1_dict
+# -
 
 def print_sample(test_instance, sess, model, n_sents=None, console=True, logger=None):
     if logger is None:
