@@ -5,7 +5,10 @@ import _pickle as cPickle
 from collections import defaultdict
 import pdb
 import logging
+from itertools import zip_longest
 import multiprocessing
+import random
+
 import numpy as np
 import tensorflow as tf
 import pandas as pd
@@ -17,8 +20,26 @@ pd.set_option('display.max_columns', 50)
 
 rouge_scorer = RougeScorer(rouge_types=['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
 
+
+# -
+
+def get_batches(data_df, batch_size):
+    instances = [instance for _, instance in data_df.iterrows()]
+    batches = list(zip_longest(*[iter(instances)]*batch_size))
+    batches = [tuple([instance for instance in batch if instance is not None]) for batch in batches]
+    return batches
+
+
+def get_batches_iterator(batches, log_period):
+    batches = random.sample(batches, len(batches))
+    batches_list = list(zip(*[iter(batches)]*log_period))
+    return iter(batches_list)
+
+
+# +
+
 def get_sents_from_tokens(tokens):
-    return [' '.join(line_tokens) for line_tokens in tokens]
+    return [' '.join(line_tokens) for line_xtaaokens in tokens]
 
 def get_text_from_sents(sents):
     return ' '.join(sents)
@@ -97,6 +118,15 @@ def load(config):
         name_tensors = {tensor.name: tensor for tensor in tf.global_variables()}
         sess.run([name_tensors[name].assign(variable) for name, variable in name_variables.items()]) # restore parameters
     return sess, model, saver
+
+def restore(sess, model, n_path):
+    ckpt = tf.train.get_checkpoint_state(model.config.dir_model)
+    all_model_paths = ckpt.all_model_checkpoint_paths
+    model_path = all_model_paths[n_path]
+    
+    saver = tf.train.Saver(max_to_keep=model.config.max_to_keep)
+    saver.restore(sess, model_path)
+    return sess
 
 def init(config, trash=True):
     epoch = 0

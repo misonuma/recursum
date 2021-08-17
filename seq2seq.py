@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from components import sample_latents
-from nn import doubly_rnn, nhdp, rcrp
+from nn import doubly_rnn, nhdp
 from topic_beam_search_decoder import BeamSearchDecoder
 from basic_decoder import BasicDecoder
 from topic_helper import TrainingHelper, GumbelSoftmaxEmbeddingHelper, SampleEmbeddingHelper
@@ -27,21 +27,13 @@ def encode_inputs(model, enc_inputs, sent_l, cell_name='', reuse=False):
     flat_l = tf.shape(enc_inputs_flat)[0]
     
     with tf.variable_scope(cell_name + 'fw', initializer=tf.contrib.layers.xavier_initializer(), dtype = tf.float32, reuse=reuse):
-        if model.config.cell == 'gru':
-            fw_cell = tf.contrib.rnn.GRUCell(model.config.dim_hidden)
-            fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=model.enc_keep_prob)
-        elif model.config.cell == 'lstm':
-            fw_cell = tf.contrib.rnn.LSTMCell(model.config.dim_hidden)
-            fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=model.enc_keep_prob)
+        fw_cell = tf.contrib.rnn.GRUCell(model.config.dim_hidden)
+        fw_cell = tf.contrib.rnn.DropoutWrapper(fw_cell, output_keep_prob=model.enc_keep_prob)
         fw_initial_state = fw_cell.zero_state(flat_l, tf.float32)
     
     with tf.variable_scope(cell_name + 'bw', initializer=tf.contrib.layers.xavier_initializer(), dtype = tf.float32, reuse=reuse):
-        if model.config.cell == 'gru':
-            bw_cell = tf.contrib.rnn.GRUCell(model.config.dim_hidden)
-            bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=model.enc_keep_prob)
-        elif model.config.cell == 'lstm':
-            bw_cell = tf.contrib.rnn.LSTMCell(model.config.dim_hidden)
-            bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=model.enc_keep_prob)            
+        bw_cell = tf.contrib.rnn.GRUCell(model.config.dim_hidden)
+        bw_cell = tf.contrib.rnn.DropoutWrapper(bw_cell, output_keep_prob=model.enc_keep_prob)
         bw_initial_state = bw_cell.zero_state(flat_l, tf.float32)
 
     bi_outputs_flat, bi_output_state_flat = tf.nn.bidirectional_dynamic_rnn(fw_cell, bw_cell, enc_inputs_flat,
@@ -49,11 +41,8 @@ def encode_inputs(model, enc_inputs, sent_l, cell_name='', reuse=False):
                                                                                                                                      initial_state_bw=bw_initial_state,
                                                                                                                                      sequence_length=sent_l_flat)
     
-    if model.config.cell == 'gru':
-        outputs_flat = tf.concat(list(bi_outputs_flat), -1)
-        output_state_flat = tf.concat(list(bi_output_state_flat), -1)
-    elif model.config.cell=='lstm':
-        output_state_flat = tf.concat([state_flat.h for state_flat in bi_output_state_flat], 1)
+    outputs_flat = tf.concat(list(bi_outputs_flat), -1)
+    output_state_flat = tf.concat(list(bi_output_state_flat), -1)
     
     outputs_ = tf.reshape(outputs_flat, [tf.shape(enc_inputs)[0], tf.shape(enc_inputs)[1], tf.shape(enc_inputs)[2], model.config.dim_hidden*2]) # batch_l x max_doc_l x max_sent_l x dim_hidden
     outputs = tf.layers.Dense(units=model.config.dim_hidden, activation=tf.nn.tanh, name='outputs')(outputs_)
@@ -84,19 +73,8 @@ def encode_nhdp_probs_topic_posterior(model, dim_hidden, latents_probs_sent_topi
     # sample topic prob. dist. for each sentence
     probs_sent_topic_layer = lambda h: tf.nn.sigmoid(tf.tensordot(latents_probs_sent_topic_posterior, h, axes=[[-1], [-1]]))
     
-    if model.config.renew_drnn:
-        dropout_layer = None
-        layer_norm = None
-        sigmoid = True
-    else:
-        dropout_layer = tf.layers.Dropout(model.t_variables['enc_keep_prob']) if model.config.dropout_drnn else None # TODO
-        layer_norm = tf.contrib.layers.layer_norm if model.config.layernorm_drnn else None # TODO
-        sigmoid = False
-    
-    tree_sent_sticks_path, _ = doubly_rnn(dim_hidden, config.tree_idxs, output_layer=probs_sent_topic_layer, \
-                                          dropout_layer=dropout_layer, layer_norm=layer_norm, sigmoid=sigmoid, cell=config.cell, name='sticks_path')
-    tree_sent_sticks_depth, _ = doubly_rnn(dim_hidden, config.tree_idxs, output_layer=probs_sent_topic_layer, \
-                                          dropout_layer=dropout_layer, layer_norm=layer_norm, sigmoid=sigmoid, cell=config.cell, name='sticks_depth')
+    tree_sent_sticks_path, _ = doubly_rnn(dim_hidden, config.tree_idxs, output_layer=probs_sent_topic_layer, name='sticks_path')
+    tree_sent_sticks_depth, _ = doubly_rnn(dim_hidden, config.tree_idxs, output_layer=probs_sent_topic_layer, name='sticks_depth')
     tree_probs_sent_topic_posterior = nhdp(tree_sent_sticks_path, tree_sent_sticks_depth, config.tree_idxs)
     probs_sent_topic_posterior_ = tf.multiply(tf.concat([tree_probs_sent_topic_posterior[topic_idx] for topic_idx in config.topic_idxs], -1), \
                                               tf.expand_dims(mask_doc, -1)) # batch_l x max_doc_l x n_topic
@@ -235,8 +213,7 @@ def wrap_attention(model, dec_cell, sent_outputs, n_tiled, beam_width=None):
     att_cell = AttentionWrapper(dec_cell,
                                                       attention_mechanism=att_mechanism,
                                                       attention_layer_size=model.config.dim_emb,
-                                                      alignment_history=(model.config.coverage or model.config.regularizer),
-#                                                       alignment_history=True,
+                                                      alignment_history=False,
                                                       prob_gen_layer=model.prob_gen_layer)
 
     return att_cell

@@ -1,6 +1,41 @@
 #coding: utf-8
+# +
+from collections import defaultdict
+
 import numpy as np
-import tensorflow as tf
+
+
+# -
+
+def update_config_tree(config):
+    config.tree_idxs = get_tree_idxs(config.tree)
+    config.topic_idxs = get_topic_idxs(config.tree_idxs)
+    config.n_topic=sum([len(child_idxs) for child_idxs in config.tree_idxs.values()]) + 1
+    
+    config.child_to_parent_idxs = get_child_to_parent_idxs(config.tree_idxs)
+    config.all_child_idxs = list(config.child_to_parent_idxs.keys()) # n_topic - 1
+    
+    config.tree_depth = get_depth(config.tree_idxs)
+    config.depth_topic_idxs = defaultdict(list)
+    for topic_idx, depth in config.tree_depth.items():
+        config.depth_topic_idxs[depth].append(topic_idx)
+    config.n_depth = max(config.tree_depth.values())
+   
+    depth_probs_topic_prior = {depth: 1./config.n_depth/len(topic_idxs) for depth, topic_idxs in config.depth_topic_idxs.items()}
+    config.probs_topic_prior = np.array([depth_probs_topic_prior[config.tree_depth[topic_idx]] for topic_idx in config.topic_idxs], dtype=np.float32)
+    
+    return config
+
+
+def get_tree_idxs(tree, tree_idxs=None, depth=0, parent_idx=0):
+    if tree_idxs is None: tree_idxs = {}
+    child_idxs = [parent_idx*10+i+1 for i in range(int(tree[depth]))]
+    tree_idxs[parent_idx] = child_idxs
+    if depth+1 < len(tree):
+        for child_idx in child_idxs:
+            tree_idxs = get_tree_idxs(tree, tree_idxs=tree_idxs, depth=depth+1, parent_idx=child_idx)
+    return tree_idxs
+
 
 def get_topic_idxs(tree_idxs):
     return [0] + [idx for child_idxs in tree_idxs.values() for idx in child_idxs]

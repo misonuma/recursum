@@ -298,8 +298,7 @@ class AttentionTopicGuidedLanguageModel():
                 self.tau = tf.cast(tf.divide(self.global_step, tf.constant(self.config.linear_steps)), dtype=tf.float32)
                 self.beta = tf.minimum(self.config.beta_last, self.config.beta_init + self.tau)
             else:
-                self.beta = tf.constant(1.)    
-            self.beta_disc = self.beta if self.config.beta_disc else tf.constant(1.)
+                self.beta = tf.constant(1.)
             
             if self.config.lr_step:
                 self.lr_step = tf.minimum(tf.cast(self.global_step, tf.float32)**(-1/2), tf.cast(self.global_step, tf.float32)*self.config.warmup**(-3/2))
@@ -332,8 +331,8 @@ class AttentionTopicGuidedLanguageModel():
                 self.opt_gen, self.grad_vars_gen, self.clipped_grad_vars_gen = \
                     get_opt(self.loss, var_list=list(tf.trainable_variables('dec')), lr=self.lr, global_step=self.global_step)
                 
-                self.loss_disc = self.beta_disc * self.config.lam_disc * self.loss_disc_sent + \
-                                            self.beta_disc * self.config.lam_disc * self.loss_disc_topic + \
+                self.loss_disc = self.config.lam_disc * self.loss_disc_sent + \
+                                            self.config.lam_disc * self.loss_disc_topic + \
                                             self.beta * tf.maximum(self.loss_kl_prob, self.config.capacity_prob)
 
                 self.opt_disc, self.grad_vars_disc, self.clipped_grad_vars_disc = \
@@ -342,8 +341,8 @@ class AttentionTopicGuidedLanguageModel():
             else:
                 self.loss = self.loss_recon + \
                                     self.beta * tf.maximum(self.loss_kl_sent_gmm, self.config.capacity_gmm) + \
-                                    self.beta_disc * self.config.lam_disc * self.loss_disc_sent + \
-                                    self.beta_disc * self.config.lam_disc * self.loss_disc_topic + \
+                                    self.config.lam_disc * self.loss_disc_sent + \
+                                    self.config.lam_disc * self.loss_disc_topic + \
                                     self.beta * tf.maximum(self.loss_kl_prob, self.config.capacity_prob)
 
                 self.opt, self.grad_vars, self.clipped_grad_vars = \
@@ -364,10 +363,8 @@ class AttentionTopicGuidedLanguageModel():
                                                                      num_partitions=max(self.config.tree_depth.values())) # list<depth> :n_topic_depth*batch_l
             
             # ------------------------------Evaluatiion------------------------------
-            self.loss_list_train = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm, \
-                                                    self.loss_disc_sent, self.loss_disc_topic]
-            self.loss_list_eval = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm,  \
-                                                    self.loss_disc_sent, self.loss_disc_topic, self.loss_kl_topic_gmm]
+            self.loss_list_train = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm, self.loss_disc_sent, self.loss_disc_topic]
+            self.loss_list_eval = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm,  self.loss_disc_sent, self.loss_disc_topic, self.loss_kl_topic_gmm]
             self.loss_sum = (self.loss_recon + self.loss_kl_prob + self.loss_kl_sent_gmm) * self.n_sents
             
     def get_feed_dict(self, batch, mode, assertion=False):

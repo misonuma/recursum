@@ -1,13 +1,7 @@
-
 import numpy as np
 
 from evaluation.rouge_scorer import RougeScorer
 from tree import get_topic_idxs
-
-rouge_name = 'rouge1'
-rouge_obj = 'fmeasure'
-stopwords = None
-rouge_scorer = RougeScorer(rouge_types=list(set([rouge_name])), use_stemmer=True, stopwords=stopwords)
 
 
 def get_sorted_topic_idxs(tree_idxs, parent_idx=0, sorted_topic_idxs=None):
@@ -24,7 +18,7 @@ def get_sorted_topic_idxs(tree_idxs, parent_idx=0, sorted_topic_idxs=None):
     return sorted_topic_idxs
 
 def greedysum(args):
-    tree_idxs, topic_sents, text, topk, threshold, truncate, max_summary_l, verbose = args
+    tree_idxs, topic_sents, text, topk, threshold, max_summary_l = args
     
     docs = [doc.strip() for doc in text.split('</DOC>')]
     assert len(docs) == 8
@@ -37,11 +31,15 @@ def greedysum(args):
     topk_summary_rouge_list = [0.]
 
     unique_topic_sents, unique_topic_indices = np.unique(topic_sents, return_index=True)
-    candidate_topic_indices_list = [[i for i, topic_sent in enumerate(unique_topic_sents) if len(topic_sent.split()) > truncate]]
+    candidate_topic_indices_list = [[i for i, topic_sent in enumerate(unique_topic_sents)]]
     summary_sents = []
+    
+    rouge_name = 'rouge1'
+    stopwords = None
+    rouge_scorer = RougeScorer(rouge_types=list(set([rouge_name])), use_stemmer=True, stopwords=stopwords)
 
     def mean_rouge(docs, candidate_summary_sents):
-        return np.mean([getattr(rouge_scorer.score(target=doc, prediction=' '.join(candidate_summary_sents))[rouge_name], rouge_obj) for doc in docs])
+        return np.mean([getattr(rouge_scorer.score(target=doc, prediction=' '.join(candidate_summary_sents))[rouge_name], 'fmeasure') for doc in docs])
 
     def rouge_precision(topk_summary_sents, topic_sent):
         return getattr(rouge_scorer.score(target=' '.join(topk_summary_sents), prediction=topic_sent)[rouge_name], 'precision')
@@ -131,14 +129,6 @@ def greedysum(args):
                 sorted_summary_sents.append(sorted_summary_sent)
 
         summary_l_sents[summary_l] = {'sents': sorted_summary_sents, 'indices': sorted_summary_indices}
-        
-        if verbose: 
-            print(summary_l)
-            print('sents:', summary_l_sents[summary_l]['sents'])
-            print('idxs:', [topic_idxs[topic_index] for topic_index in summary_l_sents[summary_l]['indices']])
-            print('rouge:', np.sort(candidate_rouges)[::-1][0])
-            print('topk idxs:', [[topic_idxs[summary_index] for summary_index in summary_indices] for summary_indices in topk_summary_indices_list])
-            print('topk rouges:', topk_summary_rouge_list)
         
     return summary_l_sents
 

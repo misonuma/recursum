@@ -29,6 +29,7 @@ dev_batches = get_batches(dev_df, config.batch_size)
 test_batches = get_batches(test_df, config.batch_size)
 config = update_config(config, train_batches, dev_batches, word_to_idx, bow_idxs)
 
+# set gpu and seed
 os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu
 np.random.seed(config.seed)
 random.seed(config.seed)
