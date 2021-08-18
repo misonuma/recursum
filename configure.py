@@ -73,6 +73,7 @@ def get_config(nb_name=None):
     parser.add_argument('-epoch', '--n_epochs', type=int, default=5)
     parser.add_argument('-step', '--n_steps', type=int, default=1000000)
     parser.add_argument('-opt', default='adam')
+    parser.add_argument('-batch', '--batch_size', type=int, default=8)
     parser.add_argument('-lr', type=float, default=0.001)
     parser.add_argument('-lr_disc', type=float, default=0.001)
     parser.add_argument('-lr_step', action='store_true')
@@ -105,12 +106,18 @@ def get_config(nb_name=None):
     parser.add_argument('-lam_disc', type=float, default=1.) # initial value of beta    
 #     parser.add_argument('-lam_reg', type=float, default=1.) # initial value of beta
 
+    # sentence extraction
+    parser.add_argument('-topk', type=int, default=8)
+    parser.add_argument('-topk_train', type=int, default=2)
+    parser.add_argument('-threshold', type=float, default=0.6)
+    parser.add_argument('-suml', '--summary_l', type=int, default=6)
+    parser.add_argument('-num_split', type=int, default=16)
+
     # log
     parser.add_argument('-save', type=str, default='rouge')
-    parser.add_argument('-save_steps', type=int, default=15000)
-    parser.add_argument('-batch', '--batch_size', type=int, default=8)
+    parser.add_argument('-save_steps', type=int, default=0)
     parser.add_argument('-eval_batch', '--eval_batch_size', type=int, default=2)
-    parser.add_argument('-log', '--log_period', type=int, default=500)
+    parser.add_argument('-log', '--log_period', type=int, default=100)
     parser.add_argument('-txt', '--txt_period', type=int, default=1000)
     parser.add_argument('-n_freq', type=int, default=10)
     parser.add_argument('-avg', action='store_true')
@@ -162,6 +169,7 @@ def get_config(nb_name=None):
     config.path_txt = os.path.join(config.dir_model, 'txt')
     config.path_checkpoint = os.path.join(config.dir_model, 'checkpoint')
     config.dir_eval = os.path.join('eval', config.data)
+    config.rouges_max = [0., 0., 0.]
         
     # dummy tokens
     config.PAD = '<pad>' # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence

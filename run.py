@@ -37,7 +37,6 @@ def get_batches_iterator(batches, log_period):
 
 
 # +
-
 def get_sents_from_tokens(tokens):
     return [' '.join(line_tokens) for line_xtaaokens in tokens]
 
@@ -97,6 +96,8 @@ def tokens_to_sents(tokens, config):
         sents.append(sent)
     return sents
 
+
+# +
 def load(config):
     if config.load:
         tf.reset_default_graph()
@@ -128,13 +129,15 @@ def restore(sess, model, n_path):
     saver.restore(sess, model_path)
     return sess
 
+
+# +
 def init(config, trash=True):
     epoch = 0
     log_df = pd.DataFrame(columns=pd.MultiIndex.from_tuples(
         list(zip(*[['','','',
                     'TRAIN','','','','','','','',
                     'VALID','','','','','','','','','','','','','','','','',''],
-                    ['TIME','BETA','AGG',
+                    ['TIME','BETA',
                      'PPL','LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO',\
                      'PPL','LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO','TOPIC','R1','R2','RL','LCOV','ERR']]))))
     
@@ -156,7 +159,7 @@ def init(config, trash=True):
     
     return epoch, log_df, logger
 
-def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, logger, sample=False, debug=False, jupyter=True):
+def train(sess, model, saver, train_batches, dev_df, log_df, logger, sample=False, debug=False, jupyter=True):
     time_start = time.time()
 
     # train
@@ -177,6 +180,7 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
         nan_flg=False
 
     # dev
+    dev_batches = get_batches(dev_df, model.config.batch_size)
     ppl_losses_dev, _, _ = compute_loss(sess, model, dev_batches, mode='eval', sample=sample)
     log_dev = ['%.2f' % np.minimum(loss, 1e+4) for loss in ppl_losses_dev]
     
@@ -184,8 +188,8 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
     log_logdetcovs = ' | '.join(['%.1f' % logdetcov for logdetcov in depth_mean_logdetcovs_topic_posterior])
     ppl_dev = ppl_losses_dev[0]
     
-    summary_l_rouge_df = compute_rouges_f1(sess, model, dev_batches, sys_sum=greedysum, topk=4, threshold=0.6, truncate=4, max_summary_l=6, num_split=8)
-    rouges = summary_l_rouge_df[max(summary_l_rouge_df.keys())].mean().to_dict().values()
+    eval_df = get_eval_df(sess, model, dev_df, syssum=greedysum, topk=model.config.topk_train, threshold=model.config.threshold, summary_l=model.config.summary_l, num_split=model.config.num_split)
+    rouges = eval_df[['rouge1', 'rouge2', 'rougeL']].mean()
     log_rouges = ['%.3f'%rouge for rouge in rouges]
     
     beta = sess.run(model.beta)
@@ -213,13 +217,57 @@ def train(sess, model, saver, train_batches, dev_batches, test_batches, log_df, 
     log_df.to_pickle(model.config.path_log)
         
     # print sent
-    test_instance = test_batches[0][0]
+    dev_instance = dev_df.iloc[0]
     logger.info('######################### Step: %i #########################'%global_step)
-    print_summary(test_instance, sess, model, beam=True, sample=False, logger=logger)
-    print_sample(test_instance, sess, model, logger=logger)
+    print_summary(dev_instance, sess, model, beam=True, sample=False, logger=logger)
+    print_sample(dev_instance, sess, model, logger=logger)
         
     return sess, model, saver, log_df, nan_flg
 
+
+# -
+
+def get_eval_df(sess, model, data_df, syssum, topk, threshold, summary_l, num_split):
+    def compute_rouge(group_df, reference_list, summary_list):
+        assert len(group_df) == len(reference_list) == len(summary_list)
+        rouge_dict = {index: {rouge_name: getattr(rouge_obj, 'fmeasure') \
+                                  for rouge_name, rouge_obj in rouge_scorer.score(target=reference, prediction=summary).items()}\
+                                  for index, reference, summary in zip(group_df.index, reference_list, summary_list)}
+        rouge_df = pd.DataFrame.from_dict(rouge_dict, orient='index')
+        return rouge_df
+    
+    group_df = data_df.groupby('business_id').agg({
+        'doc_l': lambda doc_l_series: doc_l_series.values[0],
+        'sent_l': lambda sent_l_series: sent_l_series.values[0],
+        'token_idxs': lambda token_idxs_series: token_idxs_series.values[0],
+        'text': lambda text_series: text_series.values[0]
+    })
+
+    batches = get_batches(group_df, model.config.batch_size)
+    topic_sents_list, probs_topic_list, topic_tokens_list = compute_topic_sents_probs(sess, model, batches, mode='eval', sample=False)
+    text_list = [row.text.replace('\n', '') for _, row in group_df.iterrows()]
+
+    args = [(model.config.tree_idxs, topic_sents, text, topk, threshold, summary_l) for topic_sents, text in zip(topic_sents_list, text_list)]
+    pool = multiprocessing.Pool(processes=num_split)
+    summary_l_sents_list = pool.map(syssum, args)
+    pool.close()
+
+    summary_list = [get_text_from_sents(summary_l_sents[summary_l]['sents']) for summary_l_sents in summary_l_sents_list]
+    summary_idxs_list = [[model.config.topic_idxs[topic_index] for topic_index in summary_l_sents[summary_l]['indices']] for summary_l_sents in summary_l_sents_list]
+
+    group_df['recursum'] = summary_list
+    group_df['summary_idxs'] = summary_idxs_list
+    group_df['topic_sents'] = topic_sents_list
+    group_df['probs_topic'] = probs_topic_list
+
+    eval_df = pd.merge(data_df, group_df[['recursum', 'summary_idxs', 'topic_sents', 'probs_topic']], on='business_id', how='left')
+    eval_df[['rouge1', 'rouge2', 'rougeL']] = compute_rouge(eval_df, reference_list=list(eval_df.summary), summary_list=list(eval_df.recursum))
+    eval_df = eval_df.set_index(data_df.index)
+    assert eval_df['business_id'].to_dict() == data_df['business_id'].to_dict()
+    return eval_df
+
+
+# +
 def compute_loss(sess, model, batches, mode, sample, debug=False):
     def check(variable, sample_batch=None):
         if sample_batch is None: sample_batch = batches[0]
@@ -240,7 +288,7 @@ def compute_loss(sess, model, batches, mode, sample, debug=False):
         
         try:
             if mode == 'train':
-                _, _, _, global_step, loss_list, loss_sum = \
+                _, _, global_step, loss_list, loss_sum = \
                     sess.run([model.opt, model.opt_disc, tf.train.get_global_step(), model.loss_list_train, model.loss_sum], feed_dict = feed_dict, options=run_options)
             elif mode == 'eval':
                 global_step = None
@@ -248,11 +296,12 @@ def compute_loss(sess, model, batches, mode, sample, debug=False):
                     
         except tf.errors.InvalidArgumentError as ie:
             print(ie)
-            continue
+            pdb.set_trace()
 
         except Exception as e:
             print(e)
             n_errors += 1
+            pdb.set_trace()
         
         losses += [loss_list]
         loss_ppl += loss_sum # for computing PPL
@@ -281,27 +330,6 @@ def compute_logdetcovs(sess, model, batches, mode, sample):
     
     return depth_mean_logdetcovs_topic_posterior
 
-def compute_tensors(sess, model, batches, tensors_list, mode, sample=None):
-    batch_ndarrays_list = []
-    for batch in batches:
-        feed_dict = model.get_feed_dict(batch, mode=mode)
-        if sample is not None: feed_dict[model.t_variables['sample']] = sample
-        batch_ndarrays = sess.run(tensors_list, feed_dict=feed_dict)
-        batch_ndarrays_list += [batch_ndarrays]
-    
-    ndarrays_list = []
-    for i in range(len(tensors_list)):
-        if len(batch_ndarrays_list[0][i].shape) > 1:
-            ndarrays = tf.keras.preprocessing.sequence.pad_sequences([instance for batch_ndarrays in batch_ndarrays_list for instance in batch_ndarrays[i]], dtype=np.float32, padding='post')
-        elif len(batch_ndarrays_list[0][i].shape) == 1:
-            ndarrays = np.array([instance for batch_ndarrays in batch_ndarrays_list for instance in batch_ndarrays[i]])
-        elif len(batch_ndarrays_list[0][i].shape) == 0:
-            ndarrays = np.mean([batch_ndarrays[i] for batch_ndarrays, batch in zip(batch_ndarrays_list, batches) for _ in range(len(batch))])
-        ndarrays_list += [ndarrays]
-                                      
-    return ndarrays_list
-
-
 def compute_topic_sents_probs(sess, model, batches, mode, sample):
     topic_tokens_list, topic_sents_list, probs_topic_list = [], [], []
     
@@ -317,54 +345,6 @@ def compute_topic_sents_probs(sess, model, batches, mode, sample):
 
     assert len(topic_sents_list) == len(probs_topic_list) == len(topic_tokens_list)
     return topic_sents_list, probs_topic_list, topic_tokens_list
-
-def compute_topic_posteriors_list(sess, model, batches, mode='eval', sample=False):
-    means_topic_posterior_list, covs_topic_posterior_list, topic_sents_list = [], [], []
-    for batch in batches:
-        feed_dict = model.get_feed_dict(batch, mode=mode)
-        feed_dict[model.t_variables['sample']] = sample
-        
-        means_topic_posterior, covs_topic_posterior, batch_topic_token_idxs = \
-            sess.run([model.means_topic_posterior, model.covs_topic_posterior, model.beam_summary_idxs, ], \
-                         feed_dict=feed_dict)
-        means_topic_posterior_list += list(means_topic_posterior)
-        covs_topic_posterior_list += list(covs_topic_posterior)
-        topic_sents_list += [idxs_to_sents(topic_token_idxs, model.config) for topic_token_idxs in batch_topic_token_idxs]
-    
-    return means_topic_posterior_list, covs_topic_posterior_list, topic_sents_list
-
-
-def compute_rouges_f1(sess, model, batches, sys_sum, topk, threshold, truncate, max_summary_l, num_split):
-    data_df = pd.DataFrame([instance for batch in batches for instance in batch])
-    topic_sents_list, _, _ = compute_topic_sents_probs(sess, model, batches, mode='eval', sample=False)
-    text_list = [row.text.replace('\n', '') for _, row in data_df.iterrows()]
-    verbose = False
-    
-    args = [(model.config.tree_idxs, topic_sents, text, topk, threshold, truncate, max_summary_l, verbose) for topic_sents, text in zip(topic_sents_list, text_list)]
-    if num_split > 1:
-        pool = multiprocessing.Pool(processes=num_split)
-        summary_l_sents_list = pool.map(sys_sum, args)
-        pool.close()
-    else:
-        summary_l_sents_list = []
-        for arg in args:
-            summary_l_sents_list += sys_sum(arg)
-    
-    summary_l_rouge_df = {}
-    for summary_l in range(1, max_summary_l+1):
-        summary_list = [get_text_from_sents(summary_l_sents[summary_l]['sents']) for summary_l_sents in summary_l_sents_list]
-        reference_list = [row.summary for _, row in data_df.iterrows()]
-        summary_l_rouge_df[summary_l] = compute_rouge(data_df, reference_list, summary_list)
-    return summary_l_rouge_df
-
-
-def compute_rouge(data_df, reference_list, summary_list):
-    assert len(data_df) == len(reference_list) == len(summary_list)
-    rouge_dict = {index: {rouge_name: getattr(rouge_obj, 'fmeasure') \
-                              for rouge_name, rouge_obj in rouge_scorer.score(target=reference, prediction=summary).items()}\
-                              for index, reference, summary in zip(data_df.index, reference_list, summary_list)}
-    rouge_df = pd.DataFrame.from_dict(rouge_dict, orient='index')
-    return rouge_df
 
 def print_sample(test_instance, sess, model, n_sents=None, console=True, logger=None):
     if logger is None:
