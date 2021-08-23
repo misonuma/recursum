@@ -131,9 +131,3 @@ def greedysum(args):
         summary_l_sents[summary_l] = {'sents': sorted_summary_sents, 'indices': sorted_summary_indices}
         
     return summary_l_sents
-
-
-def tmpsum(topic_sents, prob_topics, n_sents):
-    sorted_topic_indices = np.argsort(prob_topics)[::-1][:n_sents]
-    summary_sents = [topic_sents[topic_index] for topic_index in sorted_topic_indices]
-    return summary_sents

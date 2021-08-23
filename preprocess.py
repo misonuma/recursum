@@ -53,7 +53,7 @@ parser.add_argument('-filter_doc_l', type=int, default=50)
 parser.add_argument('-filter_sent_l', type=int, default=40)
 parser.add_argument('-min_tf', type=int, default=16)
 
-parser.add_argument('-data', type=str, default='amazon')
+parser.add_argument('-data', type=str, default=None)
 
 config = parser.parse_args()
 
@@ -63,14 +63,16 @@ if config.data == 'yelp':
     parser.add_argument('-val_dir', type=str, default='data/yelp/val')
     parser.add_argument('-test_dir', type=str, default='data/yelp/test')
     parser.add_argument('-ref_path', type=str, default='data/yelp/references.csv')
-    
 elif config.data == 'amazon':
     parser.add_argument('-n_per_item', type=int, default=2)
     parser.add_argument('-train_dir', type=str, default='data/amazon/train')
     parser.add_argument('-dev_path', type=str, default='data/amazon/dev.csv')
     parser.add_argument('-test_path', type=str, default='data/amazon/test.csv')
+else:
+    raise
     
 parser.add_argument('-output_path', type=str, default=os.path.join('data', config.data, 'data_df.pkl'))
+parser.add_argument('-vocab_path', type=str, default=os.path.join('data', config.data, 'vocab.pkl'))
 config = parser.parse_args()
 
 
@@ -346,7 +348,9 @@ if __name__ == '__main__':
     elif config.data == 'amazon':
         train_df, dev_df, test_df = get_amazon_df(config)
     
-    word_to_idx = get_vocab(train_df, config)
+    word_to_idx = cPickle.load(open(config.vocab_path, 'rb'))
+#     word_to_idx = get_vocab(train_df, config)
+#     cPickle.dump(word_to_idx, open(config.vocab_path, 'wb'))
     
     train_df['token_idxs'] = apply_parallel(train_df['tokens'], n_processes=config.n_processes, map_func=apply_token_idxs)
     dev_df['token_idxs'] = apply_parallel(dev_df['tokens'], n_processes=config.n_processes, map_func=apply_token_idxs)
@@ -357,4 +361,4 @@ if __name__ == '__main__':
     test_df = filter_df(test_df, summary=True)
     
     print('saving preprocessed dataframe into %s ...'%config.output_path)
-    cPickle.dump((train_df, dev_df, test_df, word_to_idx), open(config.output_path,'wb'))
+    cPickle.dump((train_df, dev_df, test_df), open(config.output_path, 'wb'))

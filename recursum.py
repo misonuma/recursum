@@ -9,7 +9,7 @@ from components import tf_log, tf_clip_vals, tf_clip_means, tf_clip_covs, sample
                                             compute_kl_losses, compute_kl_losses_sent_gauss, compute_kl_losses_topic_gauss, compute_losses_coverage
 from seq2seq import get_embeddings, encode_inputs, encode_latents_gauss, encode_nhdp_probs_topic_posterior, decode_output_logits_flat, decode_output_sample_flat, decode_beam_output_token_idxs, decode_sample_output_token_idxs, wrap_attention
 
-class AttentionTopicGuidedLanguageModel():
+class RecursiveSummarizationModel():
     def __init__(self, config):
         tf.reset_default_graph()
         
@@ -354,18 +354,10 @@ class AttentionTopicGuidedLanguageModel():
 
                 self.loss_disc = tf.constant(0, dtype=tf.float32)
                 self.opt_disc = tf.constant(0, dtype=tf.float32)
-
-            # for monitoring logdetcov
-            self.logdetcovs_topic_posterior = tf_log(tf.linalg.det(self.covs_topic_posterior))
-            self.mask_depth = tf.tile(tf.expand_dims(tf.constant([self.config.tree_depth[topic_idx]-1 for topic_idx in self.config.topic_idxs], \
-                                                                 dtype=tf.int32), 0), [self.batch_l, 1])
-            self.depth_logdetcovs_topic_posterior = tf.dynamic_partition(self.logdetcovs_topic_posterior, self.mask_depth, \
-                                                                     num_partitions=max(self.config.tree_depth.values())) # list<depth> :n_topic_depth*batch_l
             
-            # ------------------------------Evaluatiion------------------------------
+            # ------------------------------Monitor------------------------------
             self.loss_list_train = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm, self.loss_disc_sent, self.loss_disc_topic]
             self.loss_list_eval = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm,  self.loss_disc_sent, self.loss_disc_topic, self.loss_kl_topic_gmm]
-            self.loss_sum = (self.loss_recon + self.loss_kl_prob + self.loss_kl_sent_gmm) * self.n_sents
             
     def get_feed_dict(self, batch, mode, assertion=False):
         batch_l = len(batch)
