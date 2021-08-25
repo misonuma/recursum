@@ -21,18 +21,18 @@ pip install -r requirements.txt
 
 #### Yelp
 
-Download the raw Yelp data and run the pre-process script to create train, val and test directory following:  
+- Download the raw Yelp data and run the pre-process script to create train, val and test directory following:  
 https://github.com/sosuperic/MeanSum  
 
-Download the csv file containing reference summaries from:  
+- Download the csv file containing reference summaries from:  
 https://s3.us-east-2.amazonaws.com/unsup-sum/summaries_0-200_cleaned.csv  
 (distributed in https://github.com/sosuperic/MeanSum)
 
-Run the following script:
+- Run the following script:
 ```
 python preprocess.py 
 -data yelp 
--n_processes 32
+-n_processes 32 # for multiprocessing
 -path_train </path/to/preprocessed/train/dir>
 -path_val </path/to/preprocessed/val/dir>
 -path_test </path/to/preprocessed/test/dir>
