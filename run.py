@@ -127,9 +127,8 @@ def train(sess, model, saver, train_batches, dev_df, log_df, logger, jupyter=Tru
     log_beta = '%.3f'%beta
     
     # save model
-    rougeL = rouges[-1]
-    if rougeL > model.config.rouge_max:
-        model.config.rouge_max = rougeL
+    if np.any([rouge > rouge_max for rouge, rouge_max in zip(rouges, model.config.rouges_max)]):
+        model.config.rouges_max = rouges
         saver.save(sess, model.config.path_model, global_step=global_step)
     
     # print log

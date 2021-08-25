@@ -320,40 +320,16 @@ class RecursiveSummarizationModel():
                 return opt, grad_vars, clipped_grad_vars
                 
             # ------------------------------Loss Setting------------------------------
-            if self.config.turn:
-                self.loss = self.loss_recon + \
-                                    self.beta * tf.maximum(self.loss_kl_sent_gmm, self.config.capacity_gmm)
+            self.loss = self.loss_recon + \
+                                self.beta * tf.maximum(self.loss_kl_sent_gmm, self.config.capacity_gmm)
+            self.opt, self.grad_vars, self.clipped_grad_vars = \
+                get_opt(self.loss, var_list=list(tf.trainable_variables('enc') + tf.trainable_variables('dec')), lr=self.lr, global_step=self.global_step)
 
-                self.opt, self.grad_vars, self.clipped_grad_vars = \
-                    get_opt(self.loss, var_list=list(tf.trainable_variables('enc') + tf.trainable_variables('dec')), lr=self.lr, global_step=self.global_step)
-                self.opt_infer, self.grad_vars_infer, self.clipped_grad_vars_infer = \
-                    get_opt(self.loss, var_list=list(tf.trainable_variables('enc')), lr=self.lr, global_step=self.global_step)
-                self.opt_gen, self.grad_vars_gen, self.clipped_grad_vars_gen = \
-                    get_opt(self.loss, var_list=list(tf.trainable_variables('dec')), lr=self.lr, global_step=self.global_step)
-                
-                self.loss_disc = self.config.lam_disc * self.loss_disc_sent + \
-                                            self.config.lam_disc * self.loss_disc_topic + \
-                                            self.beta * tf.maximum(self.loss_kl_prob, self.config.capacity_prob)
-
-                self.opt_disc, self.grad_vars_disc, self.clipped_grad_vars_disc = \
-                    get_opt(self.loss_disc, var_list=list(tf.trainable_variables('enc')+tf.trainable_variables('disc')), lr=self.lr_disc)
-                
-            else:
-                self.loss = self.loss_recon + \
-                                    self.beta * tf.maximum(self.loss_kl_sent_gmm, self.config.capacity_gmm) + \
-                                    self.config.lam_disc * self.loss_disc_sent + \
-                                    self.config.lam_disc * self.loss_disc_topic + \
-                                    self.beta * tf.maximum(self.loss_kl_prob, self.config.capacity_prob)
-
-                self.opt, self.grad_vars, self.clipped_grad_vars = \
-                    get_opt(self.loss, var_list=tf.trainable_variables(), lr=self.lr, global_step=self.global_step)
-                self.opt_infer, self.grad_vars_infer, self.clipped_grad_vars_infer = \
-                    get_opt(self.loss, var_list=list(tf.trainable_variables('enc') + tf.trainable_variables('disc')), lr=self.lr, global_step=self.global_step)
-                self.opt_gen, self.grad_vars_gen, self.clipped_grad_vars_gen = \
-                    get_opt(self.loss, var_list=list(tf.trainable_variables('dec')), lr=self.lr, global_step=self.global_step)
-
-                self.loss_disc = tf.constant(0, dtype=tf.float32)
-                self.opt_disc = tf.constant(0, dtype=tf.float32)
+            self.loss_disc = self.config.lam_disc * self.loss_disc_sent + \
+                                        self.config.lam_disc * self.loss_disc_topic + \
+                                        self.beta * tf.maximum(self.loss_kl_prob, self.config.capacity_prob)
+            self.opt_disc, self.grad_vars_disc, self.clipped_grad_vars_disc = \
+                get_opt(self.loss_disc, var_list=list(tf.trainable_variables('enc')+tf.trainable_variables('disc')), lr=self.lr_disc)
             
             # ------------------------------Monitor------------------------------
             self.loss_list_train = [self.loss, self.loss_disc, self.loss_recon, self.loss_kl_prob, self.loss_kl_sent_gmm, self.loss_disc_sent, self.loss_disc_topic]

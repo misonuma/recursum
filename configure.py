@@ -9,13 +9,11 @@ import pdb
 from recursum import RecursiveSummarizationModel
 from tree import update_config_tree
 
-# +
-def get_config(arg):
+def get_config(arg=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument('gpu')
-    parser.add_argument('data')
-    parser.add_argument('model')
-    
+    parser.add_argument('-gpu', type=str, default='0')
+    parser.add_argument('-data', type=str, default=None)
+    parser.add_argument('-model', type=str, default='recursum')
     parser.add_argument('-seed', type=int, default=1234)
     
     # dimenssion
@@ -25,15 +23,9 @@ def get_config(arg):
 
     # topic model
     parser.add_argument('-tree', type=str, default=None)
-#     parser.add_argument('-topic', '--n_topic', type=int, default=21)
-#     parser.add_argument('-dep', '--n_depth', type=int, default=3)
     parser.add_argument('-cov_root', type=float, default=1.)
     parser.add_argument('-minlv', '--min_logvar', type=float, default=0.)
-#     parser.add_argument('-prior', action='store_true')
-    
-#     parser.add_argument('-maxlv_bow', '--max_logvar_bow', type=float, default=np.inf)
-#     parser.add_argument('-minlv_bow', '--min_logvar_bow', type=float, default=-np.inf)
-        
+
     # encoder
     parser.add_argument('-bi', '--bidirectional', type=bool, default=True)
     parser.add_argument('-att', '--attention', type=bool, default=True)
@@ -62,7 +54,6 @@ def get_config(arg):
     parser.add_argument('-lr_step', action='store_true')
     parser.add_argument('-warmup', type=float, default=20000)
     parser.add_argument('-sample', action='store_true')
-    parser.add_argument('-turn', type=bool, default=True)
     parser.add_argument('-gl', '--grad_clip', type=float, default=5.)
     parser.add_argument('-wkp', '--word_keep_prob', type=float, default=0.75)
     parser.add_argument('-ekp', '--enc_keep_prob', type=float, default=0.8)
@@ -79,7 +70,7 @@ def get_config(arg):
 
     # sentence extraction
     parser.add_argument('-topk', type=int, default=8)
-    parser.add_argument('-topk_train', type=int, default=2)
+    parser.add_argument('-topk_train', type=int, default=4)
     parser.add_argument('-threshold', type=float, default=0.6)
     parser.add_argument('-suml', '--summary_l', type=int, default=6)
     parser.add_argument('-num_split', type=int, default=16)
@@ -87,10 +78,11 @@ def get_config(arg):
     # log
     parser.add_argument('-log', '--log_period', type=int, default=100)
     parser.add_argument('-max_to_keep', type=int, default=10)
+    parser.add_argument('-dir_data', type=str, default='data')
+    parser.add_argument('-dir_param', type=str, default='model')
     parser.add_argument('-name_data', type=str, default='data_df.pkl')
     parser.add_argument('-name_vocab', type=str, default='vocab.pkl')
     parser.add_argument('-name_eval', type=str, default='eval_df.pkl')
-    
     parser.add_argument('-stable', action='store_true')
     
     # configure
@@ -104,15 +96,17 @@ def get_config(arg):
     config = update_config_tree(config)
     
     # paths
-    config.name_model = ''.join(args[2:])
-    config.path_data = os.path.join('data', config.data, config.name_data)
-    config.path_vocab = os.path.join('data', config.data, config.name_vocab)
-    config.dir_model = os.path.join('model', config.data, config.name_model)
+    i_gpu = args.index('-gpu')
+    i_data = args.index('-data')
+    config.name_model = config.model + ''.join([arg for i, arg in enumerate(args) if i not in [i_gpu, i_gpu+1, i_data, i_data+1]])
+    config.path_data = os.path.join(config.dir_data, config.data, config.name_data)
+    config.path_vocab = os.path.join(config.dir_data, config.data, config.name_vocab)
+    config.dir_model = os.path.join(config.dir_param, config.data, config.name_model)
     config.path_model = os.path.join(config.dir_model, 'model')
     config.path_eval = os.path.join(config.dir_model, config.name_eval)
     config.path_log = os.path.join(config.dir_model, 'log')
     config.path_txt = os.path.join(config.dir_model, 'txt')
-    config.rouge_max = 0.
+    config.rouges_max = [0., 0., 0.]
         
     # dummy tokens
     config.PAD = '<pad>' # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence
@@ -123,8 +117,6 @@ def get_config(arg):
     
     return config
 
-
-# -
 
 def update_config(config, train_batches, dev_batches, word_to_idx):
     config.n_train = sum([len(batch) for batch in train_batches])
