@@ -7,6 +7,8 @@ https://arxiv.org/abs/2106.08007
 
 Masaru Isonuma, Juncihiro Mori, Danushka Bollegala, and Ichiro Sakata (The University of Tokyo, University of Liverpool)  
 
+---
+
 ### Environment
 
 Python 3.6
@@ -15,6 +17,7 @@ Run the following script to install required packages.
 ```
 pip install -r requirements.txt
 ```
+
 
 ### Preprocessing
 
@@ -31,7 +34,7 @@ https://s3.us-east-2.amazonaws.com/unsup-sum/summaries_0-200_cleaned.csv
 ```
 python preprocess.py \
 -data yelp \
--n_processes 32 \
+-n_processes 16 \
 -dir_train </path/to/train/dir> \
 -dir_val </path/to/val/dir> \
 -dir_test </path/to/test/dir> \
@@ -51,7 +54,7 @@ https://github.com/abrazinskas/Copycat-abstractive-opinion-summarizer/tree/maste
 ```
 python preprocess.py \
 -data amazon \
--n_processes 32 \
+-n_processes 16 \
 -dir_train </path/to/train/dir> \
 -path_val </path/to/dev.csv> \
 -path_test </path/to/test.csv> 
@@ -59,37 +62,42 @@ python preprocess.py \
 
 The preprocessed data are saved in `data` by default.
 
+
 ### Training
 
 - Run the following script:
 ```
 python train.py \
 -gpu <index/of/gpu> \
--data <"yelp"/or/"amazon"> 
+-data <"yelp"/or/"amazon"> \
+-n_processes 16
 ```
 
 The other arguments and default parameters are defined in `configure.py`.  
 The trained parameters are saved in `model` by default.  
 
+
 ### Evaluation
 
-Run the following script (only single-gpu is available):  
-
-```
-python evaluate.py \
--gpu <index/of/gpu> \
--data <"yelp"/or/"amazon"> 
-```
-
-You need to set the same arguments as training except for gpu index.  
-You can also use our checkpoint in `model/yelp/recursum-tree44-stable` and `model/amazon/recursum-tree44-stable` as follows:  
+- Run the following script (only single-gpu is available):  
 
 ```
 python evaluate.py \
 -gpu <index/of/gpu> \
 -data <"yelp"/or/"amazon"> \
--tree 44 \
+-n_processes 16
+```
+
+You need to set the same arguments as training except for `-gpu` and `-n_processes`.  
+- You can also use our checkpoint in `model/yelp/recursum-stable` and `model/amazon/recursum-stable` as follows:  
+
+```
+python evaluate.py \
+-gpu <index/of/gpu> \
+-data <"yelp"/or/"amazon"> \
+-n_processes 16 \
 -stable
 ```
+
 
 ### Acknowledgement
