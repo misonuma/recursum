@@ -6,6 +6,8 @@ https://arxiv.org/abs/2106.08007
 
 Masaru Isonuma, Juncihiro Mori, Danushka Bollegala, and Ichiro Sakata (The University of Tokyo, University of Liverpool)  
 
+Output examples for all reviews in dev/test splits are also avalable at `output/yelp` and `output/amazon`
+
 ---
 
 ### Environment
@@ -20,7 +22,7 @@ pip install -r requirements.txt
 
 ### Preprocessing
 
-#### Yelp (based on MeanSum (ICML 2019), http://proceedings.mlr.press/v97/chu19b/chu19b.pdf)
+#### Yelp (based on MeanSum@ICML2019, http://proceedings.mlr.press/v97/chu19b/chu19b.pdf)
 
 - Download the raw Yelp data and run the pre-process script to create train, val and test directory following:  
 https://github.com/sosuperic/MeanSum  
@@ -41,7 +43,7 @@ python preprocess_yelp.py \
 
 The preprocessed data are saved in `data/yelp` by default.
 
-#### Amazon (based on Copycat (ACL 2020), https://aclanthology.org/2020.acl-main.461/)
+#### Amazon (based on Copycat@ACL2020, https://aclanthology.org/2020.acl-main.461/)
 
 - Download the raw data from the following URL and unzip it:  
 https://abrazinskas.s3-eu-west-1.amazonaws.com/downloads/projects/copycat/data/amazon.zip  
@@ -89,8 +91,6 @@ python evaluate.py \
 
 You need to set the same arguments as those used for training except for `-gpu` and `-n_processes`.  
 You can also use our checkpoint in `model/yelp/recursum-stable` and `model/amazon/recursum-stable` by adding `-stable` flag.
-
-- Output examples for all reviews in dev/test splits are also avalable at `output/yelp` and `output/amazon`.
 
 ### Acknowledgement
 
