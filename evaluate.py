@@ -21,11 +21,8 @@ from run import load, restore, get_batches, get_eval_df
 from summarize import greedysum
 # -
 
-nb_name = '1 yelp atttglm -tree 44 -turn -linear 40000 -lr 0.0005 -lr_disc 0.00005 -nucleus 0.4'
-n_path = -1
-
 # load config
-config = get_config(nb_name)
+config = get_config()
 
 # +
 # load data
@@ -37,20 +34,16 @@ dev_batches = get_batches(dev_df, config.batch_size)
 test_batches = get_batches(test_df, config.batch_size)
 # -
 
-config = update_config(config, train_batches, dev_batches, word_to_idx)
-
 # set gpu and seed
+config = update_config(config, train_batches, dev_batches, word_to_idx)
 os.environ["CUDA_VISIBLE_DEVICES"] = config.gpu
 np.random.seed(config.seed)
 random.seed(config.seed)
 
-# buiild model
+# buiild and restore model
 sess, model, saver = load(config)
-
-sess = restore(sess, model, n_path)
+sess = restore(sess, model, config.i_checkpoint)
 
 # evaluate model
-eval_df = get_eval_df(sess, model, test_df, syssum=greedysum, topk=8, threshold=0.6, summary_l=6, num_split=50)
-eval_df[['rouge1', 'rouge2', 'rougeL']].mean()
-
-
+eval_df = get_eval_df(sess, model, test_df, syssum=greedysum, topk=config.topk, threshold=config.threshold, summary_l=config.summary_l, n_processes=config.n_processes)
+print(eval_df[['rouge1', 'rouge2', 'rougeL']].mean())

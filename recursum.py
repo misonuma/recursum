@@ -6,7 +6,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 import numpy as np
 
 from components import tf_log, tf_clip_vals, tf_clip_means, tf_clip_covs, sample_latents_fullcov, sample_gumbels, get_params_topic_prior, \
-                                            compute_kl_losses, compute_kl_losses_sent_gauss, compute_kl_losses_topic_gauss, compute_losses_coverage
+                                            compute_kl_losses, compute_kl_losses_sent_gauss, compute_kl_losses_topic_gauss
 from seq2seq import get_embeddings, encode_inputs, encode_latents_gauss, encode_nhdp_probs_topic_posterior, decode_output_logits_flat, decode_output_sample_flat, decode_beam_output_token_idxs, decode_sample_output_token_idxs, wrap_attention
 
 class RecursiveSummarizationModel():

@@ -119,7 +119,8 @@ def train(sess, model, saver, train_batches, dev_df, log_df, logger, jupyter=Tru
     losses_dev, _ = compute_loss(sess, model, dev_batches, mode='eval')
     log_dev = ['%.2f' % np.minimum(loss, 1e+4) for loss in losses_dev]
         
-    eval_df = get_eval_df(sess, model, dev_df, syssum=greedysum, topk=model.config.topk_train, threshold=model.config.threshold, summary_l=model.config.summary_l, num_split=model.config.num_split)
+    eval_df = get_eval_df(sess, model, dev_df, syssum=greedysum, topk=model.config.topk_train, threshold=model.config.threshold, \
+                          summary_l=model.config.summary_l, n_processes=model.config.n_processes)
     rouges = eval_df[['rouge1', 'rouge2', 'rougeL']].mean()
     log_rouges = ['%.3f'%rouge for rouge in rouges]
     
@@ -148,7 +149,7 @@ def train(sess, model, saver, train_batches, dev_df, log_df, logger, jupyter=Tru
     return sess, model, saver, log_df
 
 
-def get_eval_df(sess, model, data_df, syssum, topk, threshold, summary_l, num_split):
+def get_eval_df(sess, model, data_df, syssum, topk, threshold, summary_l, n_processes):
     def compute_rouge(group_df, reference_list, summary_list):
         rouge_scorer = RougeScorer(rouge_types=['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
         
@@ -166,12 +167,12 @@ def get_eval_df(sess, model, data_df, syssum, topk, threshold, summary_l, num_sp
         'text': lambda text_series: text_series.values[0]
     })
 
-    batches = get_batches(group_df, model.config.batch_eval_size)
+    batches = get_batches(group_df, model.config.batch_size)
     topic_sents_list, probs_topic_list = compute_topic_sents_probs(sess, model, batches, mode='eval')
     text_list = [row.text.replace('\n', '') for _, row in group_df.iterrows()]
 
     args = [(model.config.tree_idxs, topic_sents, text, topk, threshold, summary_l) for topic_sents, text in zip(topic_sents_list, text_list)]
-    pool = multiprocessing.Pool(processes=num_split)
+    pool = multiprocessing.Pool(processes=n_processes)
     summary_l_sents_list = pool.map(syssum, args)
     pool.close()
 

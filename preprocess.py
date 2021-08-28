@@ -1,26 +1,7 @@
-# -*- coding: utf-8 -*-
-# ---
-# jupyter:
-#   jupytext:
-#     text_representation:
-#       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.7.1
-#   kernelspec:
-#     display_name: py36
-#     language: python
-#     name: py36
-# ---
-
-# +
-# %load_ext autoreload
-# %autoreload
-
 import os
 import re
 import _pickle as cPickle
-from collections import OrderedDict, defaultdict, Counter
+from collections import Counter
 import argparse
 import multiprocessing
 import math
@@ -59,20 +40,20 @@ config = parser.parse_args()
 
 if config.data == 'yelp':
     parser.add_argument('-n_per_item', type=int, default=12)
-    parser.add_argument('-train_dir', type=str, default='data/yelp/train')
-    parser.add_argument('-val_dir', type=str, default='data/yelp/val')
-    parser.add_argument('-test_dir', type=str, default='data/yelp/test')
-    parser.add_argument('-ref_path', type=str, default='data/yelp/references.csv')
+    parser.add_argument('-dir_train', type=str, default='data/yelp/train')
+    parser.add_argument('-dir_val', type=str, default='data/yelp/val')
+    parser.add_argument('-dir_test', type=str, default='data/yelp/test')
+    parser.add_argument('-path_ref', type=str, default='data/yelp/references.csv')
 elif config.data == 'amazon':
     parser.add_argument('-n_per_item', type=int, default=2)
-    parser.add_argument('-train_dir', type=str, default='data/amazon/train')
-    parser.add_argument('-dev_path', type=str, default='data/amazon/dev.csv')
-    parser.add_argument('-test_path', type=str, default='data/amazon/test.csv')
+    parser.add_argument('-dir_train', type=str, default='data/amazon/train')
+    parser.add_argument('-path_dev', type=str, default='data/amazon/dev.csv')
+    parser.add_argument('-path_test', type=str, default='data/amazon/test.csv')
 else:
     raise
     
-parser.add_argument('-output_path', type=str, default=os.path.join('data', config.data, 'data_df.pkl'))
-parser.add_argument('-vocab_path', type=str, default=os.path.join('data', config.data, 'vocab.pkl'))
+parser.add_argument('-path_output', type=str, default=os.path.join('data', config.data, 'data_df.pkl'))
+parser.add_argument('-path_vocab', type=str, default=os.path.join('data', config.data, 'vocab.pkl'))
 config = parser.parse_args()
 
 
@@ -174,7 +155,7 @@ def get_yelp_tmp_df(data_paths):
     data_raw_df = data_raw_df[data_raw_df['tokens'].apply(lambda tokens: len(tokens) > 2)]
     return data_raw_df
 
-def get_yelp_ref_df(ref_path, train_tmp_df, dev_tmp_df, test_tmp_df):
+def get_yelp_ref_df(path_ref, train_tmp_df, dev_tmp_df, test_tmp_df):
     def get_review_business_id_dict(ref_tmp_df, train_tmp_df, dev_tmp_df, test_tmp_df):
         ref_review_ids = []
         for _, row in ref_tmp_df.iterrows():
@@ -185,7 +166,7 @@ def get_yelp_ref_df(ref_path, train_tmp_df, dev_tmp_df, test_tmp_df):
         review_stars_dict = {row.review_id: row.stars for _, row in pd.merge(ref_review_id_df, concat_raw_df).iterrows()}
         return review_business_id_dict, review_stars_dict
 
-    ref_tmp_df = pd.read_csv(ref_path)
+    ref_tmp_df = pd.read_csv(path_ref)
     ref_tmp_df['business_id_csv'] = ref_tmp_df.apply(lambda row: row['Input.business_id'] if row['Input.business_id'] != '#NAME?' else 'null_%i' % row.name, axis=1)
     review_business_id_dict, review_stars_dict = get_review_business_id_dict(ref_tmp_df, train_tmp_df, dev_tmp_df, test_tmp_df)
 
@@ -243,15 +224,15 @@ def get_yelp_raw_df(data_df, ref_df):
 
 def get_yelp_df(config):
     get_data_paths = lambda data_dir: [os.path.join(data_dir, data_name) for data_name in os.listdir(data_dir) if not data_name == 'store-to-nreviews.json']
-    train_data_paths = get_data_paths(config.train_dir)
-    dev_data_paths = get_data_paths(config.val_dir)
-    test_data_paths = get_data_paths(config.test_dir)
+    train_data_paths = get_data_paths(config.dir_train)
+    dev_data_paths = get_data_paths(config.dir_val)
+    test_data_paths = get_data_paths(config.dir_test)
 
     train_tmp_df = apply_parallel(train_data_paths, n_processes=config.n_processes, map_func=get_yelp_tmp_df).reset_index()
     dev_tmp_df = apply_parallel(dev_data_paths, n_processes=config.n_processes, map_func=get_yelp_tmp_df).reset_index()
     test_tmp_df = apply_parallel(test_data_paths, n_processes=config.n_processes, map_func=get_yelp_tmp_df).reset_index()
 
-    ref_df = get_yelp_ref_df(config.ref_path, train_tmp_df, dev_tmp_df, test_tmp_df)
+    ref_df = get_yelp_ref_df(config.path_ref, train_tmp_df, dev_tmp_df, test_tmp_df)
     assert len(ref_df) == 200
 
     train_raw_df = get_yelp_raw_df(train_tmp_df, ref_df)
@@ -279,8 +260,8 @@ def get_yelp_df(config):
 # # amazon
 
 # +
-def get_amazon_ref_df(ref_path):
-    ref_raw_df = pd.read_csv(ref_path, sep='\t')
+def get_amazon_ref_df(path_ref):
+    ref_raw_df = pd.read_csv(path_ref, sep='\t')
     ref_list = []
     for _, row in ref_raw_df.iterrows():
         business_id = row['prod_id']
@@ -326,10 +307,10 @@ def get_amazon_raw_df(data_paths):
     return data_raw_df
 
 def get_amazon_df(config):
-    dev_df = get_amazon_ref_df(config.dev_path)
-    test_df = get_amazon_ref_df(config.test_path)
+    dev_df = get_amazon_ref_df(config.path_dev)
+    test_df = get_amazon_ref_df(config.path_test)
 
-    train_paths = [os.path.join(config.train_dir, data_name) for data_name in os.listdir(config.train_dir)]
+    train_paths = [os.path.join(config.dir_train, data_name) for data_name in os.listdir(config.dir_train)]
     train_raw_df = apply_parallel(train_paths, n_processes=32, map_func=get_amazon_raw_df).reset_index().rename(columns={'group_id': 'business_id', 'rating': 'stars'})
 
     train_df = get_group_df(train_raw_df, n_reviews=config.n_reviews, filter_sent_l=config.filter_sent_l, filter_doc_l=config.filter_doc_l, \
@@ -348,9 +329,9 @@ if __name__ == '__main__':
     elif config.data == 'amazon':
         train_df, dev_df, test_df = get_amazon_df(config)
     
-    word_to_idx = cPickle.load(open(config.vocab_path, 'rb'))
+    word_to_idx = cPickle.load(open(config.path_vocab, 'rb'))
 #     word_to_idx = get_vocab(train_df, config)
-#     cPickle.dump(word_to_idx, open(config.vocab_path, 'wb'))
+#     cPickle.dump(word_to_idx, open(config.path_vocab, 'wb'))
     
     train_df['token_idxs'] = apply_parallel(train_df['tokens'], n_processes=config.n_processes, map_func=apply_token_idxs)
     dev_df['token_idxs'] = apply_parallel(dev_df['tokens'], n_processes=config.n_processes, map_func=apply_token_idxs)
@@ -360,5 +341,5 @@ if __name__ == '__main__':
     dev_df = filter_df(dev_df, summary=True)
     test_df = filter_df(test_df, summary=True)
     
-    print('saving preprocessed dataframe into %s ...'%config.output_path)
-    cPickle.dump((train_df, dev_df, test_df), open(config.output_path, 'wb'))
+    print('saving preprocessed dataframe into %s ...'%config.path_output)
+    cPickle.dump((train_df, dev_df, test_df), open(config.path_output, 'wb'))

@@ -73,7 +73,7 @@ def get_config(arg=None):
     parser.add_argument('-topk_train', type=int, default=4)
     parser.add_argument('-threshold', type=float, default=0.6)
     parser.add_argument('-suml', '--summary_l', type=int, default=6)
-    parser.add_argument('-num_split', type=int, default=16)
+    parser.add_argument('-n_processes', type=int, default=16)
 
     # log
     parser.add_argument('-log', '--log_period', type=int, default=100)
@@ -83,6 +83,7 @@ def get_config(arg=None):
     parser.add_argument('-name_data', type=str, default='data_df.pkl')
     parser.add_argument('-name_vocab', type=str, default='vocab.pkl')
     parser.add_argument('-name_eval', type=str, default='eval_df.pkl')
+    parser.add_argument('-i_checkpoint', type=int, default=-1)
     parser.add_argument('-stable', action='store_true')
     
     # configure
@@ -96,9 +97,12 @@ def get_config(arg=None):
     config = update_config_tree(config)
     
     # paths
-    i_gpu = args.index('-gpu')
-    i_data = args.index('-data')
-    config.name_model = config.model + ''.join([arg for i, arg in enumerate(args) if i not in [i_gpu, i_gpu+1, i_data, i_data+1]])
+    args_index = lambda s: args.index(s) if s in args else -100
+    i_gpu = args_index('-gpu')
+    i_data = args_index('-data')
+    i_dir = args_index('-dir_data')
+    i_processes = args_index('-n_processes')
+    config.name_model = config.model + ''.join([arg for i, arg in enumerate(args) if i not in [i_gpu, i_gpu+1, i_data, i_data+1, i_dir, i_dir+1, i_processes, i_processes+1]])
     config.path_data = os.path.join(config.dir_data, config.data, config.name_data)
     config.path_vocab = os.path.join(config.dir_data, config.data, config.name_vocab)
     config.dir_model = os.path.join(config.dir_param, config.data, config.name_model)
@@ -107,7 +111,7 @@ def get_config(arg=None):
     config.path_log = os.path.join(config.dir_model, 'log')
     config.path_txt = os.path.join(config.dir_model, 'txt')
     config.rouges_max = [0., 0., 0.]
-        
+    
     # dummy tokens
     config.PAD = '<pad>' # This has a vocab id, which is used to pad the encoder input, decoder input and target sequence
     config.UNK = '<unk>' # This has a vocab id, which is used to represent out-of-vocabulary words
