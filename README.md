@@ -40,7 +40,7 @@ python preprocess_yelp.py \
 -path_ref </path/to/reference.csv>
 ```
 
-The preprocessed data are saved in `data/yelp` by default.
+The preprocessed data will be saved in `data/yelp` by default.
 
 #### Amazon (based on Copycat@ACL2020, https://aclanthology.org/2020.acl-main.461/)
 
@@ -60,7 +60,7 @@ python preprocess_amazon.py \
 -path_test </path/to/test.csv> 
 ```
 
-The preprocessed data are saved in `data/amazon` by default.
+The preprocessed data will be saved in `data/amazon` by default.
 
 
 ### Training
@@ -74,7 +74,7 @@ python train.py \
 ```
 
 The other arguments and default parameters are defined in `configure.py`.  
-The trained parameters are saved in `model` by default.  
+The trained parameters will be saved in `model` by default.  
 
 
 ### Evaluation
