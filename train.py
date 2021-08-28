@@ -4,7 +4,6 @@ import pdb
 import random
 import _pickle as cPickle
 from itertools import takewhile
-from tqdm import tqdm
 
 import numpy as np
 

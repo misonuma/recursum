@@ -15,7 +15,6 @@ import pandas as pd
 
 from evaluation.rouge_scorer import RougeScorer
 from summarize import greedysum
-from IPython.display import clear_output
 
 
 # -
@@ -83,10 +82,10 @@ def init(config):
     log_df = pd.DataFrame(columns=pd.MultiIndex.from_tuples(
         list(zip(*[['','',
                     'TRAIN','','','','','','',
-                    'VALID','','','','','','','','','','','','','','',''],
+                    'VALID','','','','','','','','','',''],
                     ['TIME','BETA',
-                     'LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO',\
-                     'LVAE','LDISC','RECON','PRKL','SEKL','DISE','DITO','TOPIC','R1','R2','RL']]))))
+                     'LOSS_VAE','LOSS_DISC','LOSS_RECON','LOSS_KL_PROB','LOSS_KL_SENT','LOSS_DISC_SENT','LOSS_DISC_TOPIC',\
+                     'LOSS_VAE','LOSS_DISC','LOSS_RECON','LOSS_KL_PROB','LOSS_KL_SENT','LOSS_DISC_SENT','LOSS_DISC_TOPIC','KL_TOPIC','R1','R2','RL']]))))
     
     cmd_rm = 'rm -r %s' % config.dir_model
     res = subprocess.call(cmd_rm.split())
@@ -133,11 +132,15 @@ def train(sess, model, saver, train_batches, dev_df, log_df, logger, jupyter=Tru
         saver.save(sess, model.config.path_model, global_step=global_step)
     
     # print log
-    if jupyter: clear_output()
     log_time = int(time.time() - time_start)
     time_start = time.time()
     log_df.loc[global_step] = pd.Series([log_time, log_beta] + log_train + log_dev + log_rouges, index=log_df.columns)
-    if jupyter: display(log_df)
+    if jupyter: 
+        from IPython.display import clear_output
+        clear_output()
+        display(log_df)
+    else:
+        print_log(log_df.loc[global_step])
     log_df.to_pickle(model.config.path_log)
         
     # print sent
@@ -197,11 +200,7 @@ def compute_loss(sess, model, batches, mode):
     for batch in batches:
         feed_dict = model.get_feed_dict(batch, mode=mode)
         if mode == 'train':
-            try:
-                _, _, global_step, loss_list = sess.run([model.opt, model.opt_disc, tf.train.get_global_step(), model.loss_list_train], feed_dict = feed_dict)
-            except Exception as e:
-                print(e) # some batch causes OOM
-                continue
+            _, _, global_step, loss_list = sess.run([model.opt, model.opt_disc, tf.train.get_global_step(), model.loss_list_train], feed_dict = feed_dict)
         elif mode == 'eval':
             global_step = None
             loss_list, = sess.run([model.loss_list_eval], feed_dict = feed_dict)
@@ -222,6 +221,13 @@ def compute_topic_sents_probs(sess, model, batches, mode):
 
     assert len(topic_sents_list) == len(probs_topic_list)
     return topic_sents_list, probs_topic_list
+
+def print_log(row):
+    print('STEP: {}'.format(row.name), end=' ')
+    for column, value in row.to_dict().items():
+        if column[0] != '': print('\n', column[0], end=' ')
+        print('{}: {}'.format(column[1], value), end=' ')
+    print('')
 
 def print_summary(instance, sess, model, summary_sents=None, prob_topics=None, parent_idx=0, depth=0, sort=True, logger=None):
     def get_summary(instance, sess, model):

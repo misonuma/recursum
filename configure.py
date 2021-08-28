@@ -22,7 +22,7 @@ def get_config(arg=None):
     parser.add_argument('-lat', '--dim_latent', type=int, default=32)
 
     # topic model
-    parser.add_argument('-tree', type=str, default=None)
+    parser.add_argument('-tree', type=str, default='44') # 1st digit = number of branches on the 1st depth, 2nd digit = number of branches on the 2nd depth...
     parser.add_argument('-cov_root', type=float, default=1.)
     parser.add_argument('-minlv', '--min_logvar', type=float, default=0.)
 
