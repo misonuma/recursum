@@ -1,20 +1,19 @@
 ## Unsupervised Abstractive Opinion Summarizationby Generating Sentences with Tree-Structured Topic Guidance
-A code for "Unsupervised Abstractive Opinion Summarizationby Generating Sentences with Tree-Structured Topic Guidance", TACL to be published in 2021.
+- A code for "Unsupervised Abstractive Opinion Summarizationby Generating Sentences with Tree-Structured Topic Guidance", TACL to be published in 2021.
 
-Corresponding paper:
-https://arxiv.org/abs/2106.08007
+  - Corresponding paper: https://arxiv.org/abs/2106.08007
 
-Masaru Isonuma, Juncihiro Mori, Danushka Bollegala, and Ichiro Sakata (The University of Tokyo, University of Liverpool)  
+  - Masaru Isonuma, Juncihiro Mori, Danushka Bollegala, and Ichiro Sakata (The University of Tokyo, University of Liverpool)  
 
-Output examples for all reviews in dev/test splits are also avalable at `output/yelp` and `output/amazon`
+- Output examples for all reviews in dev/test splits are avalable at `output/yelp` and `output/amazon`.
 
 ---
 
 ### Environment
 
-Python 3.6
+- Python 3.6
 
-Run the following script to install required packages.
+- Run the following script to install required packages.
 ```
 pip install -r requirements.txt
 ```
