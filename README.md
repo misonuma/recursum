@@ -89,7 +89,8 @@ python evaluate.py \
 ```
 
 You need to set the same arguments as those used for training except for `-gpu` and `-n_processes`.  
-You can also use our checkpoint in `model/yelp/recursum-stable` and `model/amazon/recursum-stable` by adding `-stable` flag.
+You can also use our checkpoints by downloading them from [here](https://drive.google.com/file/d/1gwdJzF6PZzB3taBnhYD1QOzsksUxBBh3/view?usp=sharing).  
+Put them in `model/yelp/recursum-stable` or `model/amazon/recursum-stable` and run the script above with `-stable` flag.  
 
 ### Acknowledgement
 
